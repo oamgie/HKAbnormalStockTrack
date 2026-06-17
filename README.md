@@ -4,6 +4,17 @@ A stateless, end-of-day (EOD) volume screener for the Hong Kong Stock Exchange (
 
 No database is required — all data is fetched and processed in memory.
 
+## Latest alerts
+
+<!-- DAILY_ALERTS_START -->
+<details>
+<summary><strong>📊 Daily volume alerts — click to expand</strong></summary>
+
+*Run the screener to populate this section with the latest HKEX volume anomalies.*
+
+</details>
+<!-- DAILY_ALERTS_END -->
+
 ## What it detects
 
 A stock is included in the daily alert list when **all** of the following are true:
@@ -35,6 +46,7 @@ hkAbnormalStockTrack/
 ├── ticker_provider.py      # HK ticker + name discovery (Sina, Wikipedia)
 ├── data_fetcher.py         # Batched yfinance downloads
 ├── screener.py             # Volume anomaly logic
+├── readme_updater.py       # Collapsible daily alerts block for README.md
 ├── report_cleanup.py       # Deletes reports older than 30 days
 ├── reports/                # Daily CSV archives (committed by CI)
 ├── .github/workflows/
@@ -51,6 +63,7 @@ Each successful run produces:
 | CSV report | `reports/hk_volume_alerts_YYYYMMDD.csv` | Full alert list |
 | Console table | stdout | Markdown-style table |
 | GitHub summary | `github_summary.md` | Used by Actions for UI + email |
+| README toggle | `README.md` | Collapsible daily alert table on the repo homepage |
 
 ### CSV columns
 
@@ -88,7 +101,7 @@ The workflow in `.github/workflows/daily_run.yml`:
 2. Executes `python main.py`
 3. Publishes a **GitHub Step Summary** from `github_summary.md`
 4. Sends a **daily email** (when configured)
-5. Commits updated/deleted files under `reports/`
+5. Commits updated/deleted files under `reports/` and refreshes the collapsible **Latest alerts** section in `README.md`
 
 You can also trigger a run manually via **Actions → Daily HK Volume Screener → Run workflow**.
 

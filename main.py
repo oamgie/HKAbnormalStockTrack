@@ -18,6 +18,7 @@ import pandas as pd
 from tabulate import tabulate
 
 from data_fetcher import fetch_market_data
+from readme_updater import update_readme_daily_alerts
 from report_cleanup import prune_old_reports
 from screener import _resolve_latest_trading_dates, screen_volume_changes
 from ticker_provider import get_hk_tickers
@@ -38,6 +39,7 @@ logger = logging.getLogger("hk_volume_screener")
 logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 
 REPORTS_DIR = Path(__file__).resolve().parent / "reports"
+README_PATH = Path(__file__).resolve().parent / "README.md"
 
 
 def _format_pct_change(value: float | int) -> str:
@@ -221,12 +223,24 @@ def run() -> int:
     prune_old_reports(REPORTS_DIR)
 
     date_today, date_prev = _resolve_latest_trading_dates(market_data)
-    generate_github_markdown_summary(
-        alerts,
-        date_today.strftime("%Y-%m-%d"),
-        date_prev.strftime("%Y-%m-%d"),
-    )
+    date_today_str = date_today.strftime("%Y-%m-%d")
+    date_prev_str = date_prev.strftime("%Y-%m-%d")
+    report_filename = f"hk_volume_alerts_{run_date.strftime('%Y%m%d')}.csv"
+
+    generate_github_markdown_summary(alerts, date_today_str, date_prev_str)
     logger.info("GitHub summary written to github_summary.md")
+
+    try:
+        update_readme_daily_alerts(
+            alerts,
+            readme_path=README_PATH,
+            date_today=date_today_str,
+            date_prev=date_prev_str,
+            report_filename=report_filename,
+            updated_at=run_date,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("README update failed (non-fatal): %s", exc)
 
     elapsed = time.perf_counter() - pipeline_start
     logger.info("Pipeline finished in %.2fs", elapsed)

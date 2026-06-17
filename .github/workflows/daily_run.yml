@@ -58,11 +58,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          if [ -z "$(git status --porcelain reports/)" ]; then
-            echo "No new, changed, or deleted reports to commit."
+          if [ -z "$(git status --porcelain reports/ README.md)" ]; then
+            echo "No new, changed, or deleted reports/README to commit."
             exit 0
           fi
 
-          git add reports/
+          git add reports/ README.md
           git commit -m "chore: update HK volume screener reports $(date -u +%Y-%m-%d)"
           git push
