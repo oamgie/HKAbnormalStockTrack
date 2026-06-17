@@ -116,6 +116,18 @@ Add these repository secrets under **Settings → Secrets and variables → Acti
 | `SMTP_PASS` | App password or SMTP credential |
 | `RECEIVER_EMAIL` | Alert recipient |
 
+**`SMTP_SERVER` must be hostname only** — no `https://`, no port, no trailing spaces.
+
+| Provider | `SMTP_SERVER` value |
+|----------|---------------------|
+| Gmail | `smtp.gmail.com` |
+| Outlook / Microsoft 365 | `smtp.office365.com` (often port **587** — see note below) |
+| Yahoo | `smtp.mail.yahoo.com` |
+
+Gmail uses port **465** (SSL), which matches this workflow. If you use Outlook/Office365, you may need port **587** with STARTTLS instead — say the word and we can adjust the workflow.
+
+`SMTP_PASS` for Gmail must be a [Google App Password](https://myaccount.google.com/apppasswords), not your normal login password.
+
 ## Data sources
 
 | Source | Used for |
