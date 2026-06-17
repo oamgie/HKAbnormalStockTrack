@@ -69,5 +69,6 @@ Desktop.ini
 # Logs & local scratch output (reports/ is tracked for CI commits)
 *.log
 github_summary.md
-hk_volume_alerts_*.csv
-!reports/hk_volume_alerts_*.csv
+report_attachment.txt
+hk_volume_alerts_*.xlsx
+!reports/hk_volume_alerts_*.xlsx

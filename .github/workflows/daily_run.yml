@@ -1,4 +1,4 @@
-name: Daily HK Volume Screener
+name: Daily HK Trading Value Screener
 
 on:
   schedule:
@@ -26,7 +26,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run EOD volume screener
+      - name: Run EOD trading value screener
         run: python main.py
 
       - name: Render Table to GitHub UI Summary
@@ -68,6 +68,16 @@ jobs:
           fi
           echo "SMTP configuration format looks valid."
 
+      - name: Resolve report attachment
+        if: success()
+        id: report
+        run: |
+          if [ ! -f report_attachment.txt ]; then
+            echo "::error::report_attachment.txt not found"
+            exit 1
+          fi
+          echo "path=$(cat report_attachment.txt)" >> "$GITHUB_OUTPUT"
+
       - name: Send Daily Alert Email
         if: success()
         uses: dawidd6/action-send-mail@v17
@@ -76,12 +86,13 @@ jobs:
           server_port: 465
           username: ${{ secrets.SMTP_USER }}
           password: ${{ secrets.SMTP_PASS }}
-          subject: 📊 HKEX Daily Volume Anomalies Report
+          subject: 📊 HKEX Daily Trading Value Anomalies Report
           to: ${{ secrets.RECEIVER_EMAIL }}
           from: "HKEX Stock Bot <${{ secrets.SMTP_USER }}>"
           secure: true
           convert_markdown: true
           html_body: file://github_summary.md
+          attachments: ${{ steps.report.outputs.path }}
 
       - name: Commit daily report
         run: |
@@ -94,5 +105,5 @@ jobs:
           fi
 
           git add reports/ README.md
-          git commit -m "chore: update HK volume screener reports $(date -u +%Y-%m-%d)"
+          git commit -m "chore: update HK trading value screener reports $(date -u +%Y-%m-%d)"
           git push

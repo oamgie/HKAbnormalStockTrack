@@ -1,6 +1,6 @@
 # HK Abnormal Stock Track
 
-A stateless, end-of-day (EOD) volume screener for the Hong Kong Stock Exchange (HKEX). Each run discovers active HK listings, pulls recent daily data via [yfinance](https://github.com/ranaroussi/yfinance), and flags stocks whose trading volume shifted significantly versus the **prior trading session**.
+A stateless, end-of-day (EOD) trading-value screener for the Hong Kong Stock Exchange (HKEX). Each run discovers active HK listings, pulls recent daily data via [yfinance](https://github.com/ranaroussi/yfinance), and flags stocks whose turnover (Close × Volume) shifted significantly versus the **prior trading session**.
 
 No database is required — all data is fetched and processed in memory.
 
@@ -986,6 +986,9 @@ No database is required — all data is fetched and processed in memory.
 | 1193.HK  | CHINA RES GAS   | 华润燃气           | 2026-06-17   | 2026-06-16  |      4,864,880 |     6,084,976 | -20.05%      |
 
 [Download full CSV report](reports/hk_volume_alerts_20260617.csv)
+<summary><strong>📊 Daily trading value alerts — click to expand</strong></summary>
+
+*Run the screener to populate this section with the latest HKEX trading value anomalies.*
 
 </details>
 <!-- DAILY_ALERTS_END -->
@@ -996,11 +999,11 @@ A stock is included in the daily alert list when **all** of the following are tr
 
 | Rule | Threshold |
 |------|-----------|
-| Volume change | ≥ **+20%** or ≤ **−20%** vs prior session |
-| Liquidity floor | Latest session volume **> 100,000** shares |
-| Valid prior session | Prior session volume > 0 (no divide-by-zero) |
+| Turnover change | ≥ **+20%** or ≤ **−20%** vs prior session |
+| Liquidity floor | Latest session turnover **> HKD 15,000,000** |
+| Valid prior session | Prior session turnover > 0 (no divide-by-zero) |
 
-`Pct_Change` is formatted with an explicit sign (e.g. `+83.91%`, `−30.26%`).
+Turnover is computed as `Close × Volume` (HKD). `Value_Pct_Change` and `Price_Pct_Change` are formatted with an explicit sign (e.g. `+83.91%`, `−30.26%`).
 
 ## How trading dates work
 
@@ -1020,10 +1023,10 @@ hkAbnormalStockTrack/
 ├── main.py                 # Pipeline orchestrator
 ├── ticker_provider.py      # HK ticker + name discovery (Sina, Wikipedia)
 ├── data_fetcher.py         # Batched yfinance downloads
-├── screener.py             # Volume anomaly logic
+├── screener.py             # Trading value anomaly logic
 ├── readme_updater.py       # Collapsible daily alerts block for README.md
 ├── report_cleanup.py       # Deletes reports older than 30 days
-├── reports/                # Daily CSV archives (committed by CI)
+├── reports/                # Daily XLSX archives (committed by CI)
 ├── .github/workflows/
 │   └── daily_run.yml       # Scheduled GitHub Actions job
 └── requirements.txt
@@ -1035,12 +1038,12 @@ Each successful run produces:
 
 | Output | Location | Description |
 |--------|----------|-------------|
-| CSV report | `reports/hk_volume_alerts_YYYYMMDD.csv` | Full alert list |
+| XLSX report | `reports/hk_volume_alerts_YYYYMMDD.xlsx` | Full alert list |
 | Console table | stdout | Markdown-style table |
-| GitHub summary | `github_summary.md` | Used by Actions for UI + email |
+| GitHub summary | `github_summary.md` | Used by Actions for UI + email body |
 | README toggle | `README.md` | Collapsible daily alert table on the repo homepage |
 
-### CSV columns
+### XLSX columns
 
 | Column | Description |
 |--------|-------------|
@@ -1051,7 +1054,10 @@ Each successful run produces:
 | `Date_Prev` | Prior trading session |
 | `Volume_Today` | Shares traded on latest session |
 | `Volume_Prev` | Shares traded on prior session |
-| `Pct_Change` | Signed percent change (e.g. `+83.91%`) |
+| `Close_Today` | Closing price on latest session (HKD) |
+| `Price_Pct_Change` | Signed percent price change vs prior session |
+| `Value_Pct_Change` | Signed percent turnover change vs prior session |
+| `Market_Cap` | Total market capitalisation (HKD) |
 
 Reports older than **30 days** are deleted automatically on each run.
 
@@ -1075,7 +1081,7 @@ The workflow in `.github/workflows/daily_run.yml`:
 1. Runs **Monday–Friday at 09:15 UTC** (17:15 HKT) — after the HK close, with time for EOD data to settle
 2. Executes `python main.py`
 3. Publishes a **GitHub Step Summary** from `github_summary.md`
-4. Sends a **daily email** (when configured)
+4. Sends a **daily email** with the alert table and XLSX attachment (when configured)
 5. Commits updated/deleted files under `reports/` and refreshes the collapsible **Latest alerts** section in `README.md`
 
 You can also trigger a run manually via **Actions → Daily HK Volume Screener → Run workflow**.
@@ -1109,7 +1115,7 @@ Gmail uses port **465** (SSL), which matches this workflow. If you use Outlook/O
 |--------|----------|
 | **Sina Finance** | Active HK ticker list, English + Chinese names |
 | **Wikipedia** | Index constituent cross-check |
-| **yfinance / Yahoo Finance** | Daily OHLCV history (free, may be delayed) |
+| **yfinance / Yahoo Finance** | Daily OHLCV history, market cap (free, may be delayed) |
 | **East Money** | Optional ticker enrichment (best-effort) |
 
 ## Design principles

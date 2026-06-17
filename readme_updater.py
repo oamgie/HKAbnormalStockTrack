@@ -20,6 +20,19 @@ logger = logging.getLogger(__name__)
 _START_MARKER = "<!-- DAILY_ALERTS_START -->"
 _END_MARKER = "<!-- DAILY_ALERTS_END -->"
 
+_DISPLAY_COLUMNS = [
+    "Ticker",
+    "Name",
+    "Name_ZH",
+    "Date_Today",
+    "Date_Prev",
+    "Volume_Today",
+    "Close_Today",
+    "Price_Pct_Change",
+    "Value_Pct_Change",
+    "Market_Cap",
+]
+
 
 def _format_pct_change(value: float | int | str) -> str:
     if isinstance(value, str) and value.endswith("%"):
@@ -30,9 +43,12 @@ def _format_pct_change(value: float | int | str) -> str:
 def _build_alerts_table(df: pd.DataFrame) -> str:
     """Render alerts as a GitHub-flavoured markdown table."""
     if df.empty:
-        return "*No stocks met the volume anomaly criteria for the latest session.*"
+        return "*No stocks met the trading value anomaly criteria for the latest session.*"
 
     display = df.copy()
+    present = [col for col in _DISPLAY_COLUMNS if col in display.columns]
+    display = display[present]
+
     for date_col in ("Date_Today", "Date_Prev"):
         if date_col in display.columns:
             display[date_col] = pd.to_datetime(display[date_col]).dt.strftime("%Y-%m-%d")
@@ -41,8 +57,17 @@ def _build_alerts_table(df: pd.DataFrame) -> str:
             display[volume_col] = display[volume_col].map(
                 lambda value: f"{int(value):,}" if pd.notna(value) else ""
             )
-    if "Pct_Change" in display.columns:
-        display["Pct_Change"] = display["Pct_Change"].map(_format_pct_change)
+    if "Close_Today" in display.columns:
+        display["Close_Today"] = display["Close_Today"].map(
+            lambda value: f"{float(value):.3f}" if pd.notna(value) else ""
+        )
+    for pct_col in ("Price_Pct_Change", "Value_Pct_Change"):
+        if pct_col in display.columns:
+            display[pct_col] = display[pct_col].map(_format_pct_change)
+    if "Market_Cap" in display.columns:
+        display["Market_Cap"] = display["Market_Cap"].map(
+            lambda value: f"{int(value):,}" if pd.notna(value) else ""
+        )
 
     return tabulate(display, headers="keys", tablefmt="github", showindex=False)
 
@@ -59,7 +84,7 @@ def build_daily_alerts_section(
     timestamp = (updated_at or datetime.now()).strftime("%Y-%m-%d %H:%M:%S HKT")
     alert_count = len(df)
     summary_label = (
-        f"📊 Daily volume alerts — {alert_count} stocks "
+        f"📊 Daily trading value alerts — {alert_count} stocks "
         f"({date_today} vs {date_prev}) · click to expand"
     )
     table = _build_alerts_table(df)
@@ -70,11 +95,11 @@ def build_daily_alerts_section(
 <summary><strong>{summary_label}</strong></summary>
 
 > **Latest session:** {date_today} · **Prior session:** {date_prev} · **Updated:** {timestamp}  
-> Filters: volume change ≥ +20% or ≤ −20% · minimum volume &gt; 100,000 shares
+> Filters: turnover change ≥ +20% or ≤ −20% · minimum turnover &gt; HKD 15,000,000
 
 {table}
 
-[Download full CSV report]({report_link})
+[Download full XLSX report]({report_link})
 
 </details>
 {_END_MARKER}

@@ -176,3 +176,32 @@ def fetch_market_data(
         master.index.get_level_values("Date").nunique(),
     )
     return master
+
+
+def fetch_market_caps(tickers: list[str]) -> dict[str, int | None]:
+    """
+    Fetch market capitalisation for a list of tickers via yfinance.
+
+    Intended for alert tickers only to minimise API calls.
+    """
+    if not tickers:
+        return {}
+
+    caps: dict[str, int | None] = {}
+    for ticker in tickers:
+        try:
+            info = yf.Ticker(ticker).fast_info
+            cap = info.get("marketCap")
+            if cap is None:
+                cap = yf.Ticker(ticker).info.get("marketCap")
+            caps[ticker] = int(cap) if cap is not None else None
+        except Exception:  # noqa: BLE001
+            caps[ticker] = None
+
+    resolved = sum(1 for value in caps.values() if value is not None)
+    logger.info(
+        "Market cap fetch complete: %d/%d tickers resolved",
+        resolved,
+        len(tickers),
+    )
+    return caps
