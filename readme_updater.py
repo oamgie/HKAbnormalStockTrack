@@ -26,10 +26,13 @@ _DISPLAY_COLUMNS = [
     "Name_ZH",
     "Date_Today",
     "Date_Prev",
-    "Volume_Today",
+    "Turnover_Pct_Change",
+    "Turnover_Today",
+    "Turnover_Prev",
     "Close_Today",
     "Price_Pct_Change",
-    "Value_Pct_Change",
+    "Volume_Today",
+    "Volume_Prev",
     "Market_Cap",
 ]
 
@@ -52,16 +55,16 @@ def _build_alerts_table(df: pd.DataFrame) -> str:
     for date_col in ("Date_Today", "Date_Prev"):
         if date_col in display.columns:
             display[date_col] = pd.to_datetime(display[date_col]).dt.strftime("%Y-%m-%d")
-    for volume_col in ("Volume_Today", "Volume_Prev"):
-        if volume_col in display.columns:
-            display[volume_col] = display[volume_col].map(
+    for int_col in ("Volume_Today", "Volume_Prev", "Turnover_Today", "Turnover_Prev"):
+        if int_col in display.columns:
+            display[int_col] = display[int_col].map(
                 lambda value: f"{int(value):,}" if pd.notna(value) else ""
             )
     if "Close_Today" in display.columns:
         display["Close_Today"] = display["Close_Today"].map(
             lambda value: f"{float(value):.3f}" if pd.notna(value) else ""
         )
-    for pct_col in ("Price_Pct_Change", "Value_Pct_Change"):
+    for pct_col in ("Turnover_Pct_Change", "Price_Pct_Change"):
         if pct_col in display.columns:
             display[pct_col] = display[pct_col].map(_format_pct_change)
     if "Market_Cap" in display.columns:
@@ -77,7 +80,8 @@ def build_daily_alerts_section(
     *,
     date_today: str,
     date_prev: str,
-    report_filename: str,
+    report_csv_filename: str,
+    report_xlsx_filename: str,
     updated_at: datetime | None = None,
 ) -> str:
     """Build the collapsible README block for the latest screening results."""
@@ -88,7 +92,8 @@ def build_daily_alerts_section(
         f"({date_today} vs {date_prev}) · click to expand"
     )
     table = _build_alerts_table(df)
-    report_link = f"reports/{report_filename}"
+    csv_link = f"reports/{report_csv_filename}"
+    xlsx_link = f"reports/{report_xlsx_filename}"
 
     return f"""{_START_MARKER}
 <details>
@@ -99,7 +104,7 @@ def build_daily_alerts_section(
 
 {table}
 
-[Download full XLSX report]({report_link})
+[Download CSV report]({csv_link}) · [Download XLSX report]({xlsx_link})
 
 </details>
 {_END_MARKER}
@@ -112,7 +117,8 @@ def update_readme_daily_alerts(
     readme_path: Path,
     date_today: str,
     date_prev: str,
-    report_filename: str,
+    report_csv_filename: str,
+    report_xlsx_filename: str,
     updated_at: datetime | None = None,
 ) -> None:
     """
@@ -124,7 +130,8 @@ def update_readme_daily_alerts(
         df,
         date_today=date_today,
         date_prev=date_prev,
-        report_filename=report_filename,
+        report_csv_filename=report_csv_filename,
+        report_xlsx_filename=report_xlsx_filename,
         updated_at=updated_at,
     )
 

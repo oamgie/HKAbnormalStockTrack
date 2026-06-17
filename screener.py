@@ -37,8 +37,8 @@ def _resolve_latest_trading_dates(df: pd.DataFrame) -> tuple[pd.Timestamp, pd.Ti
     if "Date" not in working.columns:
         raise ValueError("DataFrame must contain a Date column or MultiIndex level")
 
-    valid = working.dropna(subset=["Volume"])
-    valid = valid[valid["Volume"] > 0]
+    valid = working.dropna(subset=["Volume", "Close"])
+    valid = valid[(valid["Volume"] > 0) & (valid["Close"] > 0)]
 
     if valid.empty:
         raise ValueError("No rows with positive volume found in dataset")
@@ -68,19 +68,22 @@ def screen_value_changes(df: pd.DataFrame) -> pd.DataFrame:
     -------
     pd.DataFrame
         Sorted results with columns:
-        Ticker, Date_Today, Date_Prev, Volume_Today, Volume_Prev,
-        Close_Today, Price_Pct_Change, Value_Pct_Change
+        Ticker, Date_Today, Date_Prev, Turnover_Pct_Change,
+        Turnover_Today, Turnover_Prev, Close_Today, Price_Pct_Change,
+        Volume_Today, Volume_Prev
     """
     empty_result = pd.DataFrame(
         columns=[
             "Ticker",
             "Date_Today",
             "Date_Prev",
-            "Volume_Today",
-            "Volume_Prev",
+            "Turnover_Pct_Change",
+            "Turnover_Today",
+            "Turnover_Prev",
             "Close_Today",
             "Price_Pct_Change",
-            "Value_Pct_Change",
+            "Volume_Today",
+            "Volume_Prev",
         ]
     )
 
@@ -146,22 +149,24 @@ def screen_value_changes(df: pd.DataFrame) -> pd.DataFrame:
         logger.info("No tickers with valid prior-session turnover")
         return empty_result
 
-    merged["Value_Ratio"] = merged["Turnover_Today"] / merged["Turnover_Prev"]
-    merged["Value_Pct_Change"] = (merged["Value_Ratio"] - 1.0) * 100.0
+    merged["Turnover_Ratio"] = merged["Turnover_Today"] / merged["Turnover_Prev"]
+    merged["Turnover_Pct_Change"] = (merged["Turnover_Ratio"] - 1.0) * 100.0
     merged["Price_Pct_Change"] = (
         (merged["Close_Today"] / merged["Close_Prev"]) - 1.0
     ) * 100.0
 
     alerts = merged[
-        (merged["Value_Ratio"] >= _RATIO_INCREASE_THRESHOLD)
-        | (merged["Value_Ratio"] <= _RATIO_DECREASE_THRESHOLD)
+        (merged["Turnover_Ratio"] >= _RATIO_INCREASE_THRESHOLD)
+        | (merged["Turnover_Ratio"] <= _RATIO_DECREASE_THRESHOLD)
     ].copy()
 
     alerts["Date_Today"] = date_today
     alerts["Date_Prev"] = date_prev
     alerts["Volume_Today"] = alerts["Volume_Today"].astype(np.int64)
     alerts["Volume_Prev"] = alerts["Volume_Prev"].astype(np.int64)
-    alerts["Value_Pct_Change"] = alerts["Value_Pct_Change"].round(2)
+    alerts["Turnover_Today"] = alerts["Turnover_Today"].round(0).astype(np.int64)
+    alerts["Turnover_Prev"] = alerts["Turnover_Prev"].round(0).astype(np.int64)
+    alerts["Turnover_Pct_Change"] = alerts["Turnover_Pct_Change"].round(2)
     alerts["Price_Pct_Change"] = alerts["Price_Pct_Change"].round(2)
 
     result = alerts[
@@ -169,13 +174,15 @@ def screen_value_changes(df: pd.DataFrame) -> pd.DataFrame:
             "Ticker",
             "Date_Today",
             "Date_Prev",
-            "Volume_Today",
-            "Volume_Prev",
+            "Turnover_Pct_Change",
+            "Turnover_Today",
+            "Turnover_Prev",
             "Close_Today",
             "Price_Pct_Change",
-            "Value_Pct_Change",
+            "Volume_Today",
+            "Volume_Prev",
         ]
-    ].sort_values("Value_Pct_Change", ascending=False, key=abs)
+    ].sort_values("Turnover_Pct_Change", ascending=False, key=abs)
 
     logger.info("Screener found %d value alerts", len(result))
     return result.reset_index(drop=True)

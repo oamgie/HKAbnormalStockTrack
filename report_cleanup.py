@@ -1,5 +1,5 @@
 """
-Retention policy for generated daily XLSX reports.
+Retention policy for generated daily CSV and XLSX reports.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-_REPORT_FILENAME_PATTERN = re.compile(r"^hk_volume_alerts_(\d{8})\.xlsx$")
+_REPORT_FILENAME_PATTERN = re.compile(r"^hk_volume_alerts_(\d{8})\.(csv|xlsx)$")
 _DEFAULT_RETENTION_DAYS = 30
 
 
@@ -22,9 +22,9 @@ def prune_old_reports(
     reference_date: datetime | None = None,
 ) -> list[Path]:
     """
-    Delete report XLSX files older than ``retention_days`` from ``reports_dir``.
+    Delete report CSV/XLSX files older than ``retention_days`` from ``reports_dir``.
 
-    Filenames must match ``hk_volume_alerts_YYYYMMDD.xlsx``.
+    Filenames must match ``hk_volume_alerts_YYYYMMDD.csv`` or ``.xlsx``.
     """
     if retention_days < 1:
         raise ValueError("retention_days must be at least 1")
@@ -36,7 +36,7 @@ def prune_old_reports(
     cutoff = (reference_date or datetime.now()) - timedelta(days=retention_days)
     removed: list[Path] = []
 
-    for report_path in sorted(reports_dir.glob("hk_volume_alerts_*.xlsx")):
+    for report_path in sorted(reports_dir.glob("hk_volume_alerts_*.*")):
         match = _REPORT_FILENAME_PATTERN.match(report_path.name)
         if not match:
             continue

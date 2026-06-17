@@ -3,7 +3,7 @@
 Stateless EOD HKEX trading-value screener.
 
 Discovers HK tickers, fetches recent daily data via yfinance, screens for
-significant day-over-day turnover changes, and writes results to console + XLSX.
+significant day-over-day turnover changes, and writes results to console + CSV + XLSX.
 """
 
 from __future__ import annotations
@@ -48,11 +48,13 @@ _EXPORT_COLUMNS = [
     "Name_ZH",
     "Date_Today",
     "Date_Prev",
-    "Volume_Today",
-    "Volume_Prev",
+    "Turnover_Pct_Change",
+    "Turnover_Today",
+    "Turnover_Prev",
     "Close_Today",
     "Price_Pct_Change",
-    "Value_Pct_Change",
+    "Volume_Today",
+    "Volume_Prev",
     "Market_Cap",
 ]
 
@@ -104,12 +106,14 @@ def _format_results_table(df: pd.DataFrame) -> str:
     for date_col in ("Date_Today", "Date_Prev"):
         if date_col in display.columns:
             display[date_col] = pd.to_datetime(display[date_col]).dt.strftime("%Y-%m-%d")
-    for volume_col in ("Volume_Today", "Volume_Prev"):
-        if volume_col in display.columns:
-            display[volume_col] = display[volume_col].map(lambda v: f"{v:,}")
+    for int_col in ("Volume_Today", "Volume_Prev", "Turnover_Today", "Turnover_Prev"):
+        if int_col in display.columns:
+            display[int_col] = display[int_col].map(
+                lambda v: f"{int(v):,}" if pd.notna(v) else ""
+            )
     if "Close_Today" in display.columns:
         display["Close_Today"] = display["Close_Today"].map(lambda v: f"{v:.3f}")
-    for pct_col in ("Price_Pct_Change", "Value_Pct_Change"):
+    for pct_col in ("Turnover_Pct_Change", "Price_Pct_Change"):
         if pct_col in display.columns:
             display[pct_col] = display[pct_col].map(_format_pct_change)
     if "Market_Cap" in display.columns:
@@ -120,28 +124,44 @@ def _format_results_table(df: pd.DataFrame) -> str:
     return tabulate(display, headers="keys", tablefmt="github", showindex=False)
 
 
-def _save_report(df: pd.DataFrame, run_date: datetime) -> Path:
-    """Persist screened results to reports/hk_volume_alerts_YYYYMMDD.xlsx."""
-    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    filename = f"hk_volume_alerts_{run_date.strftime('%Y%m%d')}.xlsx"
-    output_path = REPORTS_DIR / filename
-
+def _prepare_export_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Format alert DataFrame for CSV/XLSX export."""
     export = _order_export_columns(df).copy()
-    if not export.empty:
-        for date_col in ("Date_Today", "Date_Prev"):
-            export[date_col] = pd.to_datetime(export[date_col]).dt.strftime("%Y-%m-%d")
-        for pct_col in ("Price_Pct_Change", "Value_Pct_Change"):
-            export[pct_col] = export[pct_col].map(_format_pct_change)
-        export["Volume_Today"] = export["Volume_Today"].astype("Int64")
-        export["Volume_Prev"] = export["Volume_Prev"].astype("Int64")
-        export["Close_Today"] = export["Close_Today"].round(3)
-        if "Market_Cap" in export.columns:
-            export["Market_Cap"] = export["Market_Cap"].astype("Int64")
+    if export.empty:
+        return export
 
-    export.to_excel(output_path, index=False, engine="openpyxl")
-    ATTACHMENT_HINT_PATH.write_text(f"reports/{filename}", encoding="utf-8")
-    logger.info("Report saved to %s", output_path)
-    return output_path
+    for date_col in ("Date_Today", "Date_Prev"):
+        export[date_col] = pd.to_datetime(export[date_col]).dt.strftime("%Y-%m-%d")
+    for pct_col in ("Turnover_Pct_Change", "Price_Pct_Change"):
+        export[pct_col] = export[pct_col].map(_format_pct_change)
+    export["Volume_Today"] = export["Volume_Today"].astype("Int64")
+    export["Volume_Prev"] = export["Volume_Prev"].astype("Int64")
+    export["Close_Today"] = export["Close_Today"].round(3)
+    for turnover_col in ("Turnover_Today", "Turnover_Prev"):
+        if turnover_col in export.columns:
+            export[turnover_col] = export[turnover_col].astype("Int64")
+    if "Market_Cap" in export.columns:
+        export["Market_Cap"] = export["Market_Cap"].astype("Int64")
+    return export
+
+
+def _save_report(df: pd.DataFrame, run_date: datetime) -> tuple[Path, Path]:
+    """Persist screened results to reports/hk_volume_alerts_YYYYMMDD.csv and .xlsx."""
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    date_stamp = run_date.strftime("%Y%m%d")
+    csv_path = REPORTS_DIR / f"hk_volume_alerts_{date_stamp}.csv"
+    xlsx_path = REPORTS_DIR / f"hk_volume_alerts_{date_stamp}.xlsx"
+
+    export = _prepare_export_df(df)
+    export.to_csv(csv_path, index=False)
+    export.to_excel(xlsx_path, index=False, engine="openpyxl")
+
+    attachment_paths = "\n".join(
+        [f"reports/{csv_path.name}", f"reports/{xlsx_path.name}"]
+    )
+    ATTACHMENT_HINT_PATH.write_text(attachment_paths, encoding="utf-8")
+    logger.info("Report saved to %s and %s", csv_path, xlsx_path)
+    return csv_path, xlsx_path
 
 
 def generate_github_markdown_summary(
@@ -158,11 +178,11 @@ def generate_github_markdown_summary(
     if not df.empty:
         display_df = _order_export_columns(df).copy()
 
-        if "Value_Pct_Change" in display_df.columns:
-            display_df["Direction"] = display_df["Value_Pct_Change"].apply(
+        if "Turnover_Pct_Change" in display_df.columns:
+            display_df["Direction"] = display_df["Turnover_Pct_Change"].apply(
                 lambda x: "📈 UP" if x >= 0 else "📉 DOWN"
             )
-            display_df["Value_Pct_Change"] = display_df["Value_Pct_Change"].apply(
+            display_df["Turnover_Pct_Change"] = display_df["Turnover_Pct_Change"].apply(
                 lambda x: _format_pct_change(x) if isinstance(x, (int, float)) else str(x)
             )
 
@@ -171,9 +191,9 @@ def generate_github_markdown_summary(
                 lambda x: _format_pct_change(x) if isinstance(x, (int, float)) else str(x)
             )
 
-        for volume_col in ("Volume_Today", "Volume_Prev"):
-            if volume_col in display_df.columns:
-                display_df[volume_col] = display_df[volume_col].apply(
+        for int_col in ("Volume_Today", "Volume_Prev", "Turnover_Today", "Turnover_Prev"):
+            if int_col in display_df.columns:
+                display_df[int_col] = display_df[int_col].apply(
                     lambda x: f"{x:,.0f}" if isinstance(x, (int, float)) else str(x)
                 )
 
@@ -292,7 +312,9 @@ def run() -> int:
     date_today, date_prev = _resolve_latest_trading_dates(market_data)
     date_today_str = date_today.strftime("%Y-%m-%d")
     date_prev_str = date_prev.strftime("%Y-%m-%d")
-    report_filename = f"hk_volume_alerts_{run_date.strftime('%Y%m%d')}.xlsx"
+    date_stamp = run_date.strftime("%Y%m%d")
+    report_csv_filename = f"hk_volume_alerts_{date_stamp}.csv"
+    report_xlsx_filename = f"hk_volume_alerts_{date_stamp}.xlsx"
 
     generate_github_markdown_summary(alerts, date_today_str, date_prev_str)
     logger.info("GitHub summary written to github_summary.md")
@@ -303,7 +325,8 @@ def run() -> int:
             readme_path=README_PATH,
             date_today=date_today_str,
             date_prev=date_prev_str,
-            report_filename=report_filename,
+            report_csv_filename=report_csv_filename,
+            report_xlsx_filename=report_xlsx_filename,
             updated_at=run_date,
         )
     except Exception as exc:  # noqa: BLE001

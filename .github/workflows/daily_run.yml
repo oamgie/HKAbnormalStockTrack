@@ -76,7 +76,7 @@ jobs:
             echo "::error::report_attachment.txt not found"
             exit 1
           fi
-          echo "path=$(cat report_attachment.txt)" >> "$GITHUB_OUTPUT"
+          echo "path=$(paste -sd, report_attachment.txt)" >> "$GITHUB_OUTPUT"
 
       - name: Send Daily Alert Email
         if: success()

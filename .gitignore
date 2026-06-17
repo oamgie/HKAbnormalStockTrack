@@ -70,5 +70,7 @@ Desktop.ini
 *.log
 github_summary.md
 report_attachment.txt
+hk_volume_alerts_*.csv
 hk_volume_alerts_*.xlsx
+!reports/hk_volume_alerts_*.csv
 !reports/hk_volume_alerts_*.xlsx

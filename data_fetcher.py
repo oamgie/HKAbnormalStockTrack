@@ -59,6 +59,26 @@ def _parse_download_batch(raw: pd.DataFrame, tickers: list[str]) -> list[pd.Data
     return frames
 
 
+def _impute_missing_close(frame: pd.DataFrame) -> pd.DataFrame:
+    """
+    Fill missing Close prices when Yahoo returns volume but omits the EOD close.
+
+    Uses the High/Low midpoint first, then Open as a last resort.
+    """
+    if "Close" not in frame.columns or not frame["Close"].isna().any():
+        return frame
+
+    missing = frame["Close"].isna()
+    hl_ok = missing & frame["High"].notna() & frame["Low"].notna()
+    frame.loc[hl_ok, "Close"] = (frame.loc[hl_ok, "High"] + frame.loc[hl_ok, "Low"]) / 2
+
+    missing = frame["Close"].isna()
+    open_ok = missing & frame["Open"].notna()
+    frame.loc[open_ok, "Close"] = frame.loc[open_ok, "Open"]
+
+    return frame
+
+
 def _normalize_history_frame(history: pd.DataFrame, ticker: str) -> pd.DataFrame | None:
     """Validate and standardize one ticker's OHLCV history."""
     if history is None or history.empty:
@@ -78,6 +98,13 @@ def _normalize_history_frame(history: pd.DataFrame, ticker: str) -> pd.DataFrame
 
     frame["Date"] = pd.to_datetime(frame["Date"], utc=True).dt.tz_convert(None).dt.normalize()
     frame["Ticker"] = ticker
+    frame = _impute_missing_close(frame)
+
+    # Drop rows that still lack a usable close after imputation.
+    frame = frame.dropna(subset=["Close"])
+    frame = frame[frame["Close"] > 0]
+    if frame.empty:
+        return None
 
     return frame[["Ticker", "Date", "Open", "High", "Low", "Close", "Volume"]]
 
