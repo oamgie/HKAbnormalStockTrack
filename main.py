@@ -15,6 +15,8 @@ from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
+from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter
 from tabulate import tabulate
 
 from data_fetcher import fetch_market_caps, fetch_market_data
@@ -57,6 +59,19 @@ _EXPORT_COLUMNS = [
     "Volume_Prev",
     "Market_Cap",
 ]
+
+_PCT_EXPORT_COLUMNS = ("Turnover_Pct_Change", "Price_Pct_Change")
+_INT_EXPORT_COLUMNS = (
+    "Turnover_Today",
+    "Turnover_Prev",
+    "Volume_Today",
+    "Volume_Prev",
+    "Market_Cap",
+)
+_XLSX_PCT_NUMBER_FORMAT = '+0.00"%";-0.00"%";0.00"%"'
+_XLSX_INT_NUMBER_FORMAT = "#,##0"
+_XLSX_PRICE_NUMBER_FORMAT = "0.000"
+_XLSX_DATE_NUMBER_FORMAT = "yyyy-mm-dd"
 
 
 def _format_pct_change(value: float | int) -> str:
@@ -125,24 +140,55 @@ def _format_results_table(df: pd.DataFrame) -> str:
 
 
 def _prepare_export_df(df: pd.DataFrame) -> pd.DataFrame:
-    """Format alert DataFrame for CSV/XLSX export."""
+    """Prepare alert DataFrame for CSV/XLSX export with numeric cell values."""
     export = _order_export_columns(df).copy()
     if export.empty:
         return export
 
     for date_col in ("Date_Today", "Date_Prev"):
-        export[date_col] = pd.to_datetime(export[date_col]).dt.strftime("%Y-%m-%d")
-    for pct_col in ("Turnover_Pct_Change", "Price_Pct_Change"):
-        export[pct_col] = export[pct_col].map(_format_pct_change)
+        export[date_col] = pd.to_datetime(export[date_col]).dt.normalize()
+    for pct_col in _PCT_EXPORT_COLUMNS:
+        if pct_col in export.columns:
+            export[pct_col] = pd.to_numeric(export[pct_col], errors="coerce").round(2)
     export["Volume_Today"] = export["Volume_Today"].astype("Int64")
     export["Volume_Prev"] = export["Volume_Prev"].astype("Int64")
-    export["Close_Today"] = export["Close_Today"].round(3)
+    export["Close_Today"] = pd.to_numeric(export["Close_Today"], errors="coerce").round(3)
     for turnover_col in ("Turnover_Today", "Turnover_Prev"):
         if turnover_col in export.columns:
             export[turnover_col] = export[turnover_col].astype("Int64")
     if "Market_Cap" in export.columns:
         export["Market_Cap"] = export["Market_Cap"].astype("Int64")
     return export
+
+
+def _apply_xlsx_number_formats(xlsx_path: Path, export: pd.DataFrame) -> None:
+    """Apply Excel display formats while keeping underlying cell values numeric."""
+    if export.empty:
+        return
+
+    workbook = load_workbook(xlsx_path)
+    worksheet = workbook.active
+    column_index = {name: idx + 1 for idx, name in enumerate(export.columns)}
+    row_count = len(export) + 1
+
+    format_by_column: dict[str, str] = {
+        "Close_Today": _XLSX_PRICE_NUMBER_FORMAT,
+        "Date_Today": _XLSX_DATE_NUMBER_FORMAT,
+        "Date_Prev": _XLSX_DATE_NUMBER_FORMAT,
+    }
+    for column_name in _PCT_EXPORT_COLUMNS:
+        format_by_column[column_name] = _XLSX_PCT_NUMBER_FORMAT
+    for column_name in _INT_EXPORT_COLUMNS:
+        format_by_column[column_name] = _XLSX_INT_NUMBER_FORMAT
+
+    for column_name, number_format in format_by_column.items():
+        if column_name not in column_index:
+            continue
+        column_letter = get_column_letter(column_index[column_name])
+        for row in range(2, row_count + 1):
+            worksheet[f"{column_letter}{row}"].number_format = number_format
+
+    workbook.save(xlsx_path)
 
 
 def _save_report(df: pd.DataFrame, run_date: datetime) -> tuple[Path, Path]:
@@ -153,8 +199,9 @@ def _save_report(df: pd.DataFrame, run_date: datetime) -> tuple[Path, Path]:
     xlsx_path = REPORTS_DIR / f"hk_volume_alerts_{date_stamp}.xlsx"
 
     export = _prepare_export_df(df)
-    export.to_csv(csv_path, index=False)
+    export.to_csv(csv_path, index=False, date_format="%Y-%m-%d")
     export.to_excel(xlsx_path, index=False, engine="openpyxl")
+    _apply_xlsx_number_formats(xlsx_path, export)
 
     attachment_paths = "\n".join(
         [f"reports/{csv_path.name}", f"reports/{xlsx_path.name}"]
